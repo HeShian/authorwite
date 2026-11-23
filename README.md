@@ -1,6 +1,6 @@
 # 作家助手 · Arch Linux 打包
 
-`authorwrite-bin` 将阅文官方 Linux 客户端重新打包为 Arch Linux 软件包，支持 `x86_64` 和 `aarch64`。项目由社区维护。客户端和账号服务由阅文提供。[作家助手官网](https://zuojia.write.qq.com/)
+`authorwrite-bin` 将阅文官方 Linux 客户端重新打包为 Arch Linux 软件包，支持 `x86_64` 和 `aarch64`。这是第三方打包项目。客户端和账号服务由阅文提供。[作家助手官网](https://zuojia.write.qq.com/)
 
 ## 安装
 
@@ -12,7 +12,7 @@
 sudo pacman -U ./authorwrite-bin-5.24.0-4-x86_64.pkg.tar.zst
 ```
 
-如需验证下载完整性，将同一 Release 的 `SHA256SUMS` 下载到同一目录，然后运行：
+将同一 Release 的 `SHA256SUMS` 下载到同一目录，再运行以下命令验证下载完整性。
 
 ```bash
 sha256sum --ignore-missing -c SHA256SUMS
