@@ -1,0 +1,118 @@
+--- a/out/main/index.js
++++ b/out/main/index.js
+@@ -101490,4 +101490,6 @@
+   });
+   exports.mainWindow.webContents.once("did-finish-load", () => {
++    // Wayland may not send ready-to-show while the surface is still hidden.
++    if (exports.mainWindow && !exports.mainWindow.isVisible()) exports.mainWindow.show();
+   });
+   exports.mainWindow.webContents.on("did-fail-load", showErrorToast);
+@@ -101869,4 +101871,38 @@
+   });
+ }
++function showAuthorWriteWindow() {
++  const win = exports.mainWindow;
++  if (!win || win.isDestroyed()) return;
++  if (win.isMinimized()) win.restore();
++  win.show();
++  win.focus();
++
++  // niri may reject a Wayland focus request from the already-running instance.
++  // Ask its IPC to focus only this process's window after it is mapped.
++  if (!process.env.NIRI_SOCKET) return;
++  const { execFile } = require("node:child_process");
++  const deadline = Date.now() + 1000;
++  function focusInNiri() {
++    if (win.isDestroyed() || !win.isVisible()) return;
++    execFile("/usr/bin/niri", ["msg", "--json", "windows"], { timeout: 700 }, (error, stdout) => {
++      if (error || win.isDestroyed() || !win.isVisible()) return;
++      let windows;
++      try {
++        windows = JSON.parse(stdout).filter((item) => item.pid === process.pid && item.app_id === "authorwrite");
++      } catch {
++        return;
++      }
++      const target = windows.find((item) => item.title === win.getTitle()) || (windows.length === 1 ? windows[0] : null);
++      if (!target) {
++        if (Date.now() < deadline) setTimeout(focusInNiri, 75);
++        return;
++      }
++      if (!target.is_focused) {
++        execFile("/usr/bin/niri", ["msg", "action", "focus-window", "--id", String(target.id)], { timeout: 700 }, () => {});
++      }
++    });
++  }
++  focusInNiri();
++}
+ if (!require$$1.app.requestSingleInstanceLock()) {
+   console.log("app second instance exit");
+@@ -101877,9 +101913,5 @@
+   require$$1.app.on("second-instance", (e, argv) => {
+     console.log("on second-instance");
+-    if (exports.mainWindow) {
+-      if (exports.mainWindow.isMinimized()) exports.mainWindow.restore();
+-      exports.mainWindow.focus();
+-      exports.mainWindow.show();
+-    }
++    showAuthorWriteWindow();
+     argvHandler(argv);
+   });
+@@ -101953,5 +101985,7 @@
+     console.log("render-process-gone getAppMetrics = ", require$$1.app.getAppMetrics());
+   });
+-  if (!useSandBox()) {
++  // On Linux the zygote is already running. A late no-sandbox switch leaves
++  // cross-origin renderers inside its namespace without the sandbox broker.
++  if (process.platform !== "linux" && !useSandBox()) {
+     require$$1.app.commandLine.appendSwitch("no-sandbox");
+   }
+@@ -101981,15 +102015,8 @@
+   });
+   createTray();
+-  require$$1.nativeTheme.on("updated", createTray);
+ });
+-let dark = false;
+ function createTray() {
+-  if (tray && !tray.isDestroyed()) {
+-    if (require$$1.nativeTheme.shouldUseDarkColors === dark) {
+-      return;
+-    }
+-    tray.destroy();
+-  }
+-  dark = require$$1.nativeTheme.shouldUseDarkColors;
++  // The Linux icon does not vary with the theme. Keep its D-Bus registration alive.
++  if (tray && !tray.isDestroyed()) return;
+   const appPath2 = require$$1.app.getAppPath();
+   let iconPath;
+@@ -102001,5 +102028,4 @@
+   console.log("iconPath", iconPath);
+   tray = new require$$1.Tray(iconPath);
+-  let showMenu = false;
+   const contextMenu = require$$1.Menu.buildFromTemplate([
+     {
+@@ -102017,5 +102043,5 @@
+       click: () => {
+         console.log("open window");
+-        exports.mainWindow?.show();
++        showAuthorWriteWindow();
+       }
+     },
+@@ -102037,16 +102063,6 @@
+     createInspirationPopupWin(bounds);
+   });
+-  tray.on("right-click", () => {
+-    showMenu = !showMenu;
+-    if (showMenu) {
+-      tray?.popUpContextMenu(contextMenu);
+-    } else tray?.closeContextMenu();
+-  });
+-  contextMenu.addListener("menu-will-close", () => {
+-    showMenu = false;
+-  });
+-  contextMenu.addListener("menu-will-show", () => {
+-    showMenu = true;
+-  });
++  // Export the menu over StatusNotifierItem so Waybar can display it.
++  tray.setContextMenu(contextMenu);
+ }
+ require$$1.app.on("window-all-closed", () => {
